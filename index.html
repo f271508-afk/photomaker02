@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>工程施工照片自動排版產生器</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com">
+    </script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <!-- html2pdf.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js">
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            overflow-x: hidden;
+        }
+
+        @media print {
+            body {
+                background: white !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+                overflow: visible !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .print-container {
+                display: block !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                box-shadow: none !important;
+                border: none !important;
+                overflow: visible !important;
+                width: 100% !important;
+            }
+            .page-break {
+                page-break-after: always !important;
+                break-after: page !important;
+                margin: 0 !important;
+                box-shadow: none !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+            ::-webkit-scrollbar {
+                display: none;
+            }
+        }
+
+        .page-a4-portrait {
+            width: 210mm;
+            height: 297mm;
+            padding: 10mm 15mm;
+        }
+        .page-a4-landscape {
+            width: 297mm;
+            height: 210mm;
+            padding: 10mm 15mm;
+        }
+        .page-a3-portrait {
+            width: 297mm;
+            height: 420mm;
+            padding: 15mm 20mm;
+        }
+        .page-a3-landscape {
+            width: 420mm;
+            height: 297mm;
+            padding: 15mm 20mm;
+        }
+        .page-b4-portrait {
+            width: 250mm;
+            height: 353mm;
+            padding: 12mm 18mm;
+        }
+        .page-b4-landscape {
+            width: 353mm;
+            height: 250mm;
+            padding: 12mm 18mm;
+        }
+
+        .paper-page {
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800">
+
+    <header class="bg-indigo-700 text-white shadow-md no-print sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="bg-white/10 p-2 rounded-xl">
+                    <i class="fa-solid fa-hard-hat text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold">工程施工照片自動排版產生器</h1>
+                    <p class="text-xs text-indigo-200">依施工品質查核與請款拍照格式最佳化配置</p>
+                </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <button onclick="exportJSON()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2.5 rounded-xl font-medium transition flex items-center gap-1.5 shadow-sm text-xs">
+                    <i class="fa-solid fa-download"></i> 匯出專案 (JSON)
+                </button>
+                <button onclick="document.getElementById('import-json-input').click()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2.5 rounded-xl font-medium transition flex items-center gap-1.5 shadow-sm text-xs">
+                    <i class="fa-solid fa-upload"></i> 匯入專案
+                </button>
+                <input type="file" id="import-json-input" accept=".json" class="hidden" onchange="importJSON(this.files)" />
+
+                <button onclick="downloadPDF()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-medium transition flex items-center gap-2 shadow-sm text-sm">
+                    <i class="fa-solid fa-file-pdf"></i> 下載 PDF
+                </button>
+
+                <button onclick="window.print()" class="bg-indigo-800 hover:bg-indigo-900 text-white px-4 py-2.5 rounded-xl font-medium transition flex items-center gap-2 shadow-sm text-sm">
+                    <i class="fa-solid fa-print"></i> 列印
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <section class="lg:col-span-4 space-y-6 no-print">
+
+            <!-- Company & Report Metadata Config -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
+                <h2 class="text-base font-bold text-slate-900 flex items-center gap-2 border-b pb-3">
+                    <span class="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold">1</span>
+                    表頭與專案設定
+                </h2>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">頁首標題</label>
+                    <input type="text" id="report-title" oninput="state.reportTitle = this.value; renderReport();" placeholder="例如：施工品質查核紀錄" class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm" />
+                </div>
+
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block text-sm font-medium text-slate-700">公司別 / 單位名稱</label>
+                        <button onclick="openCompanyManager()" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1">
+                            <i class="fa-solid fa-gear"></i> 管理清單
+                        </button>
+                    </div>
+                    <select id="company-select" onchange="handleCompanyChange(this.value)" class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm bg-white font-medium text-slate-700 mb-2">
+                    </select>
+
+                    <div class="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                        <div class="flex items-center gap-2">
+                            <div id="company-logo-preview-box" class="w-9 h-9 rounded-lg border border-slate-300 bg-white flex items-center justify-center overflow-hidden flex-shrink-0">
+                                <i class="fa-regular fa-image text-slate-400 text-xs"></i>
+                            </div>
+                            <div>
+                                <p class="text-xs font-bold text-slate-700">公司 LOGO / MARK</p>
+                                <p class="text-[10px] text-slate-400">支援上傳企業徽標</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-1.5">
+                            <button onclick="document.getElementById('company-logo-input').click()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1 border border-indigo-200">
+                                <i class="fa-solid fa-upload"></i> 上傳
+                            </button>
+                            <button onclick="removeCompanyLogo()" id="remove-logo-btn" class="hidden text-rose-500 hover:text-rose-700 p-1 text-xs" title="移除 Logo">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                        <input type="file" id="company-logo-input" accept="image/*" class="hidden" onchange="handleCompanyLogoUpload(this.files)" />
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">工程名稱</label>
+                    <input type="text" id="project-name" oninput="state.projectName = this.value; renderReport();" placeholder="例如：建功A案新建工程" class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm" />
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">日期區間</label>
+                    <input type="text" id="report-date" oninput="state.reportDate = this.value; renderReport();" placeholder="例如：1091001-1017" class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm" />
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">紙張尺寸與方向</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <select id="paper-size-select" onchange="setPaperSize(this.value)" class="px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white font-medium text-slate-700">
+                            <option value="A4" selected>A4 紙張</option>
+                            <option value="A3">A3 紙張</option>
+                            <option value="B4">B4 紙張</option>
+                        </select>
+                        <select id="orientation-select" onchange="setOrientation(this.value)" class="px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white font-medium text-slate-700">
+                            <option value="portrait" selected>直式 (Portrait)</option>
+                            <option value="landscape">橫式 (Landscape)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 pt-2">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">每頁行數 (Rows)</label>
+                        <select id="rows-select" onchange="updateGridDimensions()" class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm bg-white font-medium text-slate-700">
+                            <!-- 由 JavaScript 動態產生 -->
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">每頁列數/欄數 (Cols)</label>
+                        <select id="cols-select" onchange="updateGridDimensions()" class="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm bg-white font-medium text-slate-700">
+                            <!-- 由 JavaScript 動態產生 -->
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload Photos -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
+                <h2 class="text-base font-bold text-slate-900 flex items-center gap-2 border-b pb-3">
+                    <span class="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold">2</span>
+                    上傳照片
+                </h2>
+
+                <div class="border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-2xl p-6 text-center cursor-pointer transition bg-slate-50 relative" onclick="document.getElementById('file-input').click()">
+                    <input type="file" id="file-input" multiple accept="image/*" class="hidden" onchange="handleFiles(this.files)" />
+                    <div class="space-y-2">
+                        <div class="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto text-lg">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                        </div>
+                        <p class="text-sm font-semibold text-slate-700">點擊或拖曳上傳照片</p>
+                        <p class="text-xs text-slate-400">支援多張照片自動分頁配置</p>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center pt-2">
+                    <span class="text-xs text-slate-500" id="photo-count-label">已上傳 0 張照片</span>
+                    <button onclick="clearAllPhotos()" class="text-xs text-rose-600 hover:text-rose-700 font-medium flex items-center gap-1">
+                        <i class="fa-solid fa-trash-can"></i> 全部清除
+                    </button>
+                </div>
+            </div>
+
+            <!-- Photo Location & Description Details Manager -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
+                <h2 class="text-base font-bold text-slate-900 flex items-center gap-2 border-b pb-3">
+                    <span class="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold">3</span>
+                    欄位標題編輯與顯示組合
+                </h2>
+
+                <!-- 三個欄位的標題與顯示開關 -->
+                <div class="space-y-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                    <!-- 編號 -->
+                    <div class="flex items-center gap-2">
+                        <label class="flex items-center gap-1.5 text-xs cursor-pointer w-20 flex-shrink-0">
+                            <input type="checkbox" id="show-index" checked onchange="state.showIndex = this.checked; renderCaptionList(); renderReport();" class="w-3.5 h-3.5 text-indigo-600 rounded" />
+                            <span class="font-medium text-slate-600">顯示</span>
+                        </label>
+                        <input type="text" id="label-index" oninput="state.labelIndex = this.value; renderReport(); renderCaptionList();" value="編號" class="flex-1 px-2 py-1.5 border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white" />
+                    </div>
+                    <!-- 照片位置 -->
+                    <div class="flex items-center gap-2">
+                        <label class="flex items-center gap-1.5 text-xs cursor-pointer w-20 flex-shrink-0">
+                            <input type="checkbox" id="show-location" checked onchange="state.showLocation = this.checked; renderCaptionList(); renderReport();" class="w-3.5 h-3.5 text-indigo-600 rounded" />
+                            <span class="font-medium text-slate-600">顯示</span>
+                        </label>
+                        <input type="text" id="label-location" oninput="state.labelLocation = this.value; renderReport(); renderCaptionList();" value="照片位置" class="flex-1 px-2 py-1.5 border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white" />
+                    </div>
+                    <!-- 內容敘述 -->
+                    <div class="flex items-center gap-2">
+                        <label class="flex items-center gap-1.5 text-xs cursor-pointer w-20 flex-shrink-0">
+                            <input type="checkbox" id="show-caption" checked onchange="state.showCaption = this.checked; renderCaptionList(); renderReport();" class="w-3.5 h-3.5 text-indigo-600 rounded" />
+                            <span class="font-medium text-slate-600">顯示</span>
+                        </label>
+                        <input type="text" id="label-caption" oninput="state.labelCaption = this.value; renderReport(); renderCaptionList();" value="內容敘述" class="flex-1 px-2 py-1.5 border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white" />
+                    </div>
+                </div>
+
+                <div id="caption-list-container" class="space-y-3 max-h-[350px] overflow-y-auto pr-1">
+                    <div class="text-center py-8 text-slate-400 text-xs">
+                        尚未上傳照片，請先於上方上傳照片
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Preview Section -->
+        <section class="lg:col-span-8 flex flex-col items-center overflow-hidden">
+
+            <div class="w-full flex justify-between items-center mb-4 no-print bg-white px-4 py-3 rounded-2xl border border-slate-200 shadow-sm">
+                <div class="text-sm font-medium text-slate-700 flex items-center gap-2">
+                    <i class="fa-solid fa-eye text-indigo-600"></i>
+                    <span>即時預覽畫面 (依參考格式自動跳頁)</span>
+                </div>
+                <div class="text-xs font-medium text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100" id="page-count-info">共 0 頁</div>
+            </div>
+
+            <div id="preview-wrapper" class="w-full overflow-x-auto flex flex-col items-center pb-12 gap-8 print-container max-w-full">
+            </div>
+
+        </section>
+
+    </main>
+
+    <div id="company-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm hidden no-print">
+        <div class="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl border border-slate-200 space-y-4">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <i class="fa-solid fa-building text-indigo-600"></i> 管理公司別/單位名稱
+                </h3>
+                <button onclick="closeCompanyManager()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+
+            <div class="flex gap-2">
+                <input type="text" id="new-company-input" placeholder="輸入新的公司或單位名稱..." class="flex-1 px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm" />
+                <button onclick="addCompany()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition flex items-center gap-1">
+                    <i class="fa-solid fa-plus"></i> 新增
+                </button>
+            </div>
+
+            <div id="company-list-modal" class="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+            </div>
+
+            <div class="flex justify-end pt-2 border-t">
+                <button onclick="closeCompanyManager()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-xl text-sm font-semibold transition">
+                    完成
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let state = {
+            companies: [
+                '中福營造股份有限公司',
+                '中毅營造股份有限公司',
+                '寶贊開發股份有限公司'
+            ],
+            company: '中福營造股份有限公司',
+            companyLogos: {},
+            reportTitle: '施工品質查核紀錄',
+            projectName: '建功A案新建工程',
+            reportDate: '1091001-1017',
+            paperSize: 'A4',
+            orientation: 'portrait',
+            rows: 3,
+            cols: 2,
+            photos: [],
+            labelIndex: '編號',
+            labelLocation: '照片位置',
+            labelCaption: '內容敘述',
+            showIndex: true,
+            showLocation: true,
+            showCaption: true
+        };
+
+        // 根據目前紙張與方向，回傳建議的「參考格式」組合
+        function getSuggestedGrid(paperSize, orientation) {
+            // 回傳 { rows, cols } 建議值
+            const suggestions = {
+                'A4_portrait': { rows: 3, cols: 2 },
+                'A4_landscape': { rows: 2, cols: 3 },
+                'A3_portrait': { rows: 4, cols: 3 },
+                'A3_landscape': { rows: 3, cols: 4 },
+                'B4_portrait': { rows: 3, cols: 3 },
+                'B4_landscape': { rows: 3, cols: 4 }
+            };
+            const key = `${paperSize}_${orientation}`;
+            return suggestions[key] || { rows: 3, cols: 2 };
+        }
+
+        // 產生 1~10 的選項，並在建議值旁標註 (參考格式)
+        function buildGridOptions(currentVal, suggestedVal, label) {
+            let html = '';
+            for (let i = 1; i <= 10; i++) {
+                const selected = (i === currentVal) ? 'selected' : '';
+                const isSuggested = (i === suggestedVal);
+                const suffix = isSuggested ? ' (參考格式)' : '';
+                html += `<option value="${i}" ${selected}>${i} ${suffix}</option>`;
+            }
+            return html;
+        }
+
+        function populateGridSelectors() {
+            const rowsSelect = document.getElementById('rows-select');
+            const colsSelect = document.getElementById('cols-select');
+            const suggested = getSuggestedGrid(state.paperSize, state.orientation);
+
+            // 確保 state.rows 與 state.cols 在 1~10 範圍內
+            if (state.rows < 1 || state.rows > 10) state.rows = suggested.rows;
+            if (state.cols < 1 || state.cols > 10) state.cols = suggested.cols;
+
+            rowsSelect.innerHTML = buildGridOptions(state.rows, suggested.rows, '行數');
+            colsSelect.innerHTML = buildGridOptions(state.cols, suggested.cols, '欄數');
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            // 初始化下拉選單
+            populateGridSelectors();
+
+            renderCompanyDropdown();
+            updateCompanyLogoPreview();
+            document.getElementById('project-name').value = state.projectName;
+            document.getElementById('report-date').value = state.reportDate;
+            document.getElementById('report-title').value = state.reportTitle;
+            document.getElementById('label-index').value = state.labelIndex;
+            document.getElementById('label-location').value = state.labelLocation;
+            document.getElementById('label-caption').value = state.labelCaption;
+            document.getElementById('show-index').checked = state.showIndex;
+            document.getElementById('show-location').checked = state.showLocation;
+            document.getElementById('show-caption').checked = state.showCaption;
+            renderReport();
+        });
+
+        function renderCompanyDropdown() {
+            const select = document.getElementById('company-select');
+            let html = '';
+            state.companies.forEach(comp => {
+                const selected = comp === state.company ? 'selected' : '';
+                html += `<option value="${comp}" ${selected}>${comp}</option>`;
+            });
+            select.innerHTML = html;
+        }
+
+        function handleCompanyChange(val) {
+            state.company = val;
+            updateCompanyLogoPreview();
+            renderReport();
+        }
+
+        function handleCompanyLogoUpload(files) {
+            if (!files || files.length === 0) return;
+            const file = files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const data = imgData.data;
+                    for (let i = 0; i < data.length; i += 4) {
+                        const r = data[i];
+                        const g = data[i + 1];
+                        const b = data[i + 2];
+                        if (r > 240 && g > 240 && b > 240) {
+                            data[i + 3] = 0;
+                        }
+                    }
+                    ctx.putImageData(imgData, 0, 0);
+                    state.companyLogos[state.company] = canvas.toDataURL('image/png');
+                    updateCompanyLogoPreview();
+                    renderReport();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+            document.getElementById('company-logo-input').value = '';
+        }
+
+        function removeCompanyLogo() {
+            delete state.companyLogos[state.company];
+            updateCompanyLogoPreview();
+            renderReport();
+        }
+
+        function updateCompanyLogoPreview() {
+            const box = document.getElementById('company-logo-preview-box');
+            const removeBtn = document.getElementById('remove-logo-btn');
+            const logo = state.companyLogos[state.company];
+            if (logo) {
+                box.innerHTML = `<img src="${logo}" class="w-full h-full object-contain" alt="Logo">`;
+                removeBtn.classList.remove('hidden');
+            } else {
+                box.innerHTML = `<i class="fa-regular fa-image text-slate-400 text-xs"></i>`;
+                removeBtn.classList.add('hidden');
+            }
+        }
+
+        function openCompanyManager() {
+            document.getElementById('company-modal').classList.remove('hidden');
+            renderCompanyModalList();
+        }
+
+        function closeCompanyManager() {
+            document.getElementById('company-modal').classList.add('hidden');
+            renderCompanyDropdown();
+        }
+
+        function renderCompanyModalList() {
+            const container = document.getElementById('company-list-modal');
+            let html = '';
+            state.companies.forEach((comp, index) => {
+                html += `
+                        <div class="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                            <input type="text" value="${comp}" onchange="editCompany(${index}, this.value)" class="flex-1 text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white font-medium text-slate-800">
+                            <button onclick="deleteCompany(${index})" class="text-rose-400 hover:text-rose-600 px-2 py-1" title="刪除"><i class="fa-solid fa-trash text-xs"></i></button>
+                        </div>
+                    `;
+            });
+            container.innerHTML = html;
+        }
+
+        function addCompany() {
+            const input = document.getElementById('new-company-input');
+            const val = input.value.trim();
+            if (!val) {
+                showAlert('請輸入公司或單位名稱');
+                return;
+            }
+            if (state.companies.includes(val)) {
+                showAlert('此公司名稱已存在');
+                return;
+            }
+            state.companies.push(val);
+            state.company = val;
+            input.value = '';
+            renderCompanyModalList();
+            renderCompanyDropdown();
+            renderReport();
+        }
+
+        function editCompany(index, val) {
+            const trimmed = val.trim();
+            if (!trimmed) {
+                showAlert('公司名稱不可為空');
+                renderCompanyModalList();
+                return;
+            }
+            const oldVal = state.companies[index];
+            state.companies[index] = trimmed;
+            if (state.company === oldVal) {
+                state.company = trimmed;
+            }
+            renderCompanyModalList();
+            renderCompanyDropdown();
+            renderReport();
+        }
+
+        function deleteCompany(index) {
+            if (state.companies.length <= 1) {
+                showAlert('至少需保留一個公司別');
+                return;
+            }
+            const removed = state.companies.splice(index, 1)[0];
+            if (state.company === removed) {
+                state.company = state.companies[0];
+            }
+            renderCompanyModalList();
+            renderCompanyDropdown();
+            renderReport();
+        }
+
+        function setPaperSize(size) {
+            state.paperSize = size;
+            updatePrintStyle();
+            // 更新下拉選單的參考格式標註
+            populateGridSelectors();
+            renderReport();
+        }
+
+        function setOrientation(orientation) {
+            state.orientation = orientation;
+            updatePrintStyle();
+            populateGridSelectors();
+            renderReport();
+        }
+
+        function updatePrintStyle() {
+            const printStyleSheet = document.getElementById('dynamic-print-style') || document.createElement('style');
+            printStyleSheet.id = 'dynamic-print-style';
+            printStyleSheet.innerHTML = `@page { size: ${state.paperSize} ${state.orientation}; margin: 0; }`;
+            document.head.appendChild(printStyleSheet);
+        }
+
+        function updateGridDimensions() {
+            const rowsVal = parseInt(document.getElementById('rows-select').value, 10);
+            const colsVal = parseInt(document.getElementById('cols-select').value, 10);
+            if (!isNaN(rowsVal) && rowsVal >= 1 && rowsVal <= 10) state.rows = rowsVal;
+            if (!isNaN(colsVal) && colsVal >= 1 && colsVal <= 10) state.cols = colsVal;
+            renderReport();
+        }
+
+        function handleFiles(files) {
+            if (!files || files.length === 0) return;
+            Array.from(files).forEach((file) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    state.photos.push({
+                        id: 'photo_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                        url: e.target.result,
+                        location: '',
+                        caption: ''
+                    });
+                    updateUI();
+                };
+                reader.readAsDataURL(file);
+            });
+            document.getElementById('file-input').value = '';
+        }
+
+        function clearAllPhotos() {
+            state.photos = [];
+            updateUI();
+        }
+
+        function deletePhoto(id) {
+            state.photos = state.photos.filter(p => p.id !== id);
+            updateUI();
+        }
+
+        function movePhoto(index, direction) {
+            const newIndex = index + direction;
+            if (newIndex < 0 || newIndex >= state.photos.length) return;
+            const temp = state.photos[index];
+            state.photos[index] = state.photos[newIndex];
+            state.photos[newIndex] = temp;
+            updateUI();
+        }
+
+        function updatePhotoField(id, field, value) {
+            const photo = state.photos.find(p => p.id === id);
+            if (photo) {
+                photo[field] = value;
+                renderReport();
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('photo-count-label').innerText = `已上傳 ${state.photos.length} 張照片`;
+            renderCaptionList();
+            renderReport();
+        }
+
+        function renderCaptionList() {
+            const container = document.getElementById('caption-list-container');
+            if (state.photos.length === 0) {
+                container.innerHTML =
+                    `<div class="text-center py-8 text-slate-400 text-xs">尚未上傳照片，請先於上方上傳照片</div>`;
+                return;
+            }
+
+            const labelIndex = state.labelIndex || '編號';
+            const labelLocation = state.labelLocation || '照片位置';
+            const labelCaption = state.labelCaption || '內容敘述';
+            const showIndex = state.showIndex !== false;
+            const showLocation = state.showLocation !== false;
+            const showCaption = state.showCaption !== false;
+
+            let html = '';
+            state.photos.forEach((photo, index) => {
+                let fieldsHtml = '';
+                if (showIndex) {
+                    fieldsHtml += `
+                            <div class="flex items-center gap-2 bg-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-200">
+                                <span class="text-xs font-bold text-slate-600 w-8 flex-shrink-0">${labelIndex}</span>
+                                <span class="text-xs font-bold text-indigo-700">${index + 1}</span>
+                            </div>
+                        `;
+                }
+                if (showLocation) {
+                    fieldsHtml += `
+                            <input type="text" value="${photo.location}" oninput="updatePhotoField('${photo.id}', 'location', this.value)" placeholder="${labelLocation}" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white font-medium">
+                        `;
+                }
+                if (showCaption) {
+                    fieldsHtml += `
+                            <input type="text" value="${photo.caption}" oninput="updatePhotoField('${photo.id}', 'caption', this.value)" placeholder="${labelCaption}" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-white">
+                        `;
+                }
+
+                html += `
+                        <div class="flex flex-col gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <img src="${photo.url}" class="w-10 h-10 object-cover rounded-lg border flex-shrink-0" alt="thumb">
+                                    <span class="text-xs font-bold text-slate-700">#${index + 1}</span>
+                                </div>
+                                <div class="flex items-center gap-1">
+                                    <button onclick="movePhoto(${index}, -1)" ${index === 0 ? 'disabled class="text-slate-300 cursor-not-allowed"' : 'class="text-slate-500 hover:text-indigo-600 px-1"'} title="往前移"><i class="fa-solid fa-arrow-up text-xs"></i></button>
+                                    <button onclick="movePhoto(${index}, 1)" ${index === state.photos.length - 1 ? 'disabled class="text-slate-300 cursor-not-allowed"' : 'class="text-slate-500 hover:text-indigo-600 px-1"'} title="往後移"><i class="fa-solid fa-arrow-down text-xs"></i></button>
+                                    <button onclick="deletePhoto('${photo.id}')" class="text-rose-400 hover:text-rose-600 px-1 ml-1" title="刪除"><i class="fa-solid fa-trash text-xs"></i></button>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 gap-1.5">
+                                ${fieldsHtml}
+                            </div>
+                        </div>
+                    `;
+            });
+            container.innerHTML = html;
+        }
+
+        function exportJSON() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download",
+                `construction_photo_report_${new Date().toISOString().slice(0, 10)}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        function importJSON(files) {
+            if (!files || files.length === 0) return;
+            const file = files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedState = JSON.parse(e.target.result);
+                    if (importedState && typeof importedState === 'object') {
+                        state.companies = importedState.companies || state.companies;
+                        state.company = importedState.company || state.companies[0];
+                        state.companyLogos = importedState.companyLogos || {};
+                        state.reportTitle = importedState.reportTitle || '施工品質查核紀錄';
+                        state.projectName = importedState.projectName || '建功A案新建工程';
+                        state.reportDate = importedState.reportDate || '1091001-1017';
+                        state.paperSize = importedState.paperSize || 'A4';
+                        state.orientation = importedState.orientation || 'portrait';
+                        state.rows = importedState.rows || 3;
+                        state.cols = importedState.cols || 2;
+                        state.photos = importedState.photos || [];
+                        state.labelIndex = importedState.labelIndex || '編號';
+                        state.labelLocation = importedState.labelLocation || '照片位置';
+                        state.labelCaption = importedState.labelCaption || '內容敘述';
+                        state.showIndex = importedState.showIndex !== undefined ? importedState.showIndex : true;
+                        state.showLocation = importedState.showLocation !== undefined ? importedState.showLocation : true;
+                        state.showCaption = importedState.showCaption !== undefined ? importedState.showCaption : true;
+
+                        document.getElementById('rows-select').value = state.rows;
+                        document.getElementById('cols-select').value = state.cols;
+                        document.getElementById('paper-size-select').value = state.paperSize;
+                        document.getElementById('orientation-select').value = state.orientation;
+                        document.getElementById('project-name').value = state.projectName;
+                        document.getElementById('report-date').value = state.reportDate;
+                        document.getElementById('report-title').value = state.reportTitle;
+                        document.getElementById('label-index').value = state.labelIndex;
+                        document.getElementById('label-location').value = state.labelLocation;
+                        document.getElementById('label-caption').value = state.labelCaption;
+                        document.getElementById('show-index').checked = state.showIndex;
+                        document.getElementById('show-location').checked = state.showLocation;
+                        document.getElementById('show-caption').checked = state.showCaption;
+                        // 重新產生下拉選單（確保參考格式標註正確）
+                        populateGridSelectors();
+                        renderCompanyDropdown();
+                        updateCompanyLogoPreview();
+                        updateUI();
+                        showAlert('專案匯入成功！');
+                    } else {
+                        showAlert('JSON 格式錯誤');
+                    }
+                } catch (err) {
+                    showAlert('無法解析 JSON 檔案');
+                }
+                document.getElementById('import-json-input').value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        function downloadPDF() {
+            const element = document.getElementById('preview-wrapper');
+            if (!element || element.children.length === 0) {
+                showAlert('目前沒有可列印的內容');
+                return;
+            }
+            showAlert('正在產生 PDF，請稍候...');
+            const opt = {
+                margin: 0,
+                filename: `construction_photo_report_${new Date().toISOString().slice(0, 10)}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+                jsPDF: { unit: 'mm', format: state.paperSize.toLowerCase(), orientation: state.orientation }
+            };
+            html2pdf().from(element).set(opt).save().then(() => {
+                const alertModal = document.getElementById('custom-alert-modal');
+                if (alertModal) alertModal.remove();
+            });
+        }
+
+        function showAlert(msg) {
+            const existingModal = document.getElementById('custom-alert-modal');
+            if (existingModal) existingModal.remove();
+            const modal = document.createElement('div');
+            modal.id = 'custom-alert-modal';
+            modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm no-print';
+            modal.innerHTML = `
+                    <div class="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl border border-slate-200 transform transition-all text-center">
+                        <div class="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-3 text-lg">
+                            <i class="fa-solid fa-circle-info"></i>
+                        </div>
+                        <p class="text-sm font-medium text-slate-800 mb-5">${msg}</p>
+                        <button onclick="document.getElementById('custom-alert-modal').remove()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-xl text-sm font-semibold transition">
+                            確定
+                        </button>
+                    </div>
+                `;
+            document.body.appendChild(modal);
+        }
+
+        function renderReport() {
+            const wrapper = document.getElementById('preview-wrapper');
+            const rows = state.rows;
+            const cols = state.cols;
+            const itemsPerPage = rows * cols;
+
+            const pages = [];
+            for (let i = 0; i < Math.max(1, Math.ceil(state.photos.length / itemsPerPage)); i++) {
+                pages.push(state.photos.slice(i * itemsPerPage, (i + 1) * itemsPerPage));
+            }
+
+            document.getElementById('page-count-info').innerText = `共 ${pages.length} 頁`;
+
+            const labelIndex = state.labelIndex || '編號';
+            const labelLocation = state.labelLocation || '照片位置';
+            const labelCaption = state.labelCaption || '內容敘述';
+            const showIndex = state.showIndex !== false;
+            const showLocation = state.showLocation !== false;
+            const showCaption = state.showCaption !== false;
+
+            let html = '';
+            pages.forEach((pagePhotos, pageIndex) => {
+                const sizeClass = `page-${state.paperSize.toLowerCase()}-${state.orientation}`;
+                const logo = state.companyLogos[state.company];
+                const titleText = state.reportTitle || '施工品質查核紀錄';
+
+                html += `
+                        <div class="bg-white shadow-xl border border-slate-300 flex flex-col justify-between relative box-border page-break paper-page ${sizeClass}">
+                            <div class="border-b-2 border-slate-800 pb-2 mb-2 flex-shrink-0 relative">
+                                <div class="text-center mb-1 flex flex-col items-center justify-center">
+                                    <div class="flex items-center justify-center gap-2 mb-0.5">
+                                        ${logo ? `<img src="${logo}" class="h-8 w-8 object-contain inline-block" alt="Logo">` : ''}
+                                        <h2 class="text-xl font-bold text-slate-900 tracking-wider">${state.company || '公司別未填寫'}</h2>
+                                    </div>
+                                    <h3 class="text-lg font-bold text-indigo-800">${titleText}</h3>
+                                </div>
+                                <div class="flex justify-between items-end text-xs font-bold text-slate-800 px-1">
+                                    <div>工程名稱：<span class="font-normal">${state.projectName || '未填寫工程名稱'}</span></div>
+                                    <div class="flex gap-4">
+                                        <span>日期：<span class="font-normal">${state.reportDate || ''}</span></span>
+                                        <span class="bg-slate-100 px-2 py-0.5 rounded border">第 ${pageIndex + 1} 頁 / 共 ${pages.length} 頁</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex-1 grid gap-2 items-center content-center" style="grid-template-columns: repeat(${cols}, minmax(0, 1fr)); grid-template-rows: repeat(${rows}, minmax(0, 1fr)); min-height: 0;">
+                    `;
+
+                for (let slot = 0; slot < itemsPerPage; slot++) {
+                    const globalIndex = pageIndex * itemsPerPage + slot;
+                    const photo = pagePhotos[slot];
+                    if (photo) {
+                        let infoRowsHtml = '';
+                        if (showIndex) {
+                            infoRowsHtml += `
+                                    <div class="flex divide-x divide-slate-300 bg-slate-50">
+                                        <div class="px-2 py-1 w-1/3 text-slate-600 font-bold bg-slate-100 text-center">${labelIndex}</div>
+                                        <div class="px-2 py-1 flex-1 font-bold text-indigo-900 text-center">${globalIndex + 1}</div>
+                                    </div>
+                                `;
+                        }
+                        if (showLocation) {
+                            infoRowsHtml += `
+                                    <div class="flex divide-x divide-slate-300">
+                                        <div class="px-2 py-1 w-1/3 text-slate-600 font-bold bg-slate-100 text-center">${labelLocation}</div>
+                                        <div class="px-2 py-1 flex-1 truncate text-slate-800" title="${photo.location}">${photo.location || ''}</div>
+                                    </div>
+                                `;
+                        }
+                        if (showCaption) {
+                            infoRowsHtml += `
+                                    <div class="flex divide-x divide-slate-300">
+                                        <div class="px-2 py-1 w-1/3 text-slate-600 font-bold bg-slate-100 text-center">${labelCaption}</div>
+                                        <div class="px-2 py-1 flex-1 truncate text-slate-800" title="${photo.caption}">${photo.caption || ''}</div>
+                                    </div>
+                                `;
+                        }
+
+                        html += `
+                                <div class="flex flex-col h-full bg-white border border-slate-400 rounded-lg p-1.5 shadow-sm justify-between overflow-hidden">
+                                    <div class="w-full flex-1 flex items-center justify-center overflow-hidden bg-slate-50 border border-slate-200 relative min-h-0">
+                                        <img src="${photo.url}" class="max-h-full max-w-full object-contain" alt="photo">
+                                    </div>
+                                    <div class="mt-1 border border-slate-300 text-xs flex flex-col divide-y divide-slate-300 flex-shrink-0 font-medium text-slate-800 bg-white rounded overflow-hidden">
+                                        ${infoRowsHtml}
+                                    </div>
+                                </div>
+                            `;
+                    } else {
+                        html += `
+                                <div class="flex flex-col h-full border border-dashed border-slate-300 rounded-lg p-2 bg-slate-50/20 items-center justify-center text-slate-300">
+                                    <i class="fa-regular fa-image text-xl mb-1"></i>
+                                    <span class="text-xs">空白欄位</span>
+                                </div>
+                            `;
+                    }
+                }
+
+                html += `
+                            </div>
+                            <div class="border-t-2 border-slate-800 pt-2 mt-2 flex justify-between items-center text-xs font-semibold text-slate-700 flex-shrink-0">
+                                <div>列印日期：${new Date().toLocaleDateString('zh-TW')}</div>
+                                <div class="flex gap-8">
+                                    <span>經辦：_______________</span>
+                                    <span>主管：_______________</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+            });
+
+            wrapper.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
